@@ -1,0 +1,374 @@
+================================================================================
+SOUZA.L - CONTEXTO RÁPIDO PARA NOVAS SESSÕES
+Última atualização: 2026-10-09
+================================================================================
+
+ESTADO ATUAL DO PROJETO
+================================================================================
+Progresso V1: ~60% completo
+Base sólida, mas V1 incompleta
+
+Última análise completa: ANALISE-PROJETO-COMPLETA.md
+Testes segurança: RELATORIO-TESTES-SEGURANCA.md
+Correções anteriores: RELATORIO-AUTONOMO.md
+
+
+ERROS CRÍTICOS (CORRIGIR ANTES DE CONTINUAR)
+================================================================================
+
+1. MIGRATION DUPLICADA (BLOQUEANTE)
+   Localização: supabase/migrations/
+   Problema: Dois arquivos com timestamp 20261009000012
+   - 20261009000012_quote_visits_schema.sql
+   - 20261009000012_test_set_role.sql
+
+   Correção:
+   mv supabase/migrations/20261009000012_test_set_role.sql \
+      supabase/migrations/20261009000013_test_set_role.sql
+
+2. FUNÇÃO set_test_role EM PRODUÇÃO (SEGURANÇA CRÍTICA)
+   Localização: supabase/migrations/20261009000013_test_set_role.sql
+   Problema: Qualquer usuário autenticado altera papel de qualquer conta
+   Impacto: Cliente vira admin = escalação de privilégios
+
+   Correção produção: REMOVER migration ou restringir a admins apenas
+   Desenvolvimento: OK, mas adicionar header "APENAS TESTE - REMOVER EM PROD"
+
+
+IMPLEMENTADO (ETAPAS 1-7)
+================================================================================
+
+✓ Etapa 1: Base e banco
+  - Tabelas: profiles, services, service_requests, service_records,
+    service_files, notifications, service_documents, service_history_summary,
+    audit_logs, worker_profiles, service_invites, quote_visits
+  - ENUMs, índices, triggers funcionando
+  - Migrations: 13 arquivos (20261002 até 20261009)
+
+✓ Etapa 2: Autenticação
+  - Supabase Auth configurado
+  - Páginas: /cadastro, /login, /recuperar-senha, /atualizar-senha
+  - Papéis: client (default), worker, admin
+  - Código cliente: 6 chars gerados automaticamente
+
+✓ Etapa 3: Permissões (RLS)
+  - RLS ativo em TODAS tabelas
+  - Políticas SELECT: só participantes do serviço
+  - Políticas INSERT: só via funções do banco
+  - Funções: find_client_by_code, create_service_request,
+    accept_service_request, reject_service_request, change_service_status
+  - Segurança validada: RELATORIO-TESTES-SEGURANCA.md
+
+✓ Etapa 4: Página pública
+  - Rota: /p/[slug]
+  - Tabela: worker_profiles
+
+✓ Etapa 5: Pedido de serviço (2 SISTEMAS)
+  Sistema tradicional:
+  - Trabalhador procura cliente por código: /pedidos/novo
+  - Cliente aceita/recusa: /convites (confuso, deveria ser /pedidos)
+
+  Sistema convite por link (EXTRA):
+  - Trabalhador cria convite: create_service_invite
+  - Cliente acessa: /convite/[token]
+  - Preview público sem login
+  - Token: 64 chars SHA256, expira 7 dias
+
+✓ Etapa 6: Serviço e registros
+  - Página: /servicos/[id]
+  - Status: in_progress, waiting_response, interrupted, completed, cancelled
+  - Registros imutáveis, identificados por papel (client/worker)
+  - Validação: 1-5000 chars, só em status aberto
+
+✓ Etapa 7: Arquivos
+  - Storage bucket: service-files (privado)
+  - Upload: server action após criar registro
+  - RLS Storage: policy verifica participação no serviço
+  - Constraints: max 10MB, fotos jpg/png
+  - API: /api/storage/service-files/[id] (signed URL 1h)
+  - Caption: campo opcional
+
+EXTRAS IMPLEMENTADOS (além do briefing):
+  - Agenda orçamentos: quote_visits, /agenda, /agenda/nova, /agenda/[id]
+  - Convite por link: service_invites
+  - Perfil público: worker_profiles
+
+
+NÃO IMPLEMENTADO (ETAPAS 8-10)
+================================================================================
+
+✗ Etapa 8: Notificações (50% - backend ok, UI falta)
+  Backend implementado:
+  - Tabela notifications
+  - Funções criam notificações (pedido aceito, status mudou, etc)
+  - RLS: usuário lê próprias notificações
+
+  Falta:
+  - Página /notificacoes
+  - Componente de lista
+  - Marcar como lida (UI)
+  - Badge de não-lidas no menu
+  - Link para recurso relacionado
+
+  Tempo estimado: 8-12h
+
+✗ Etapa 9: Laudo e download (0% - nada iniciado)
+  Falta tudo:
+  - Botão "Solicitar Laudo" na página serviço
+  - Gerar PDF no servidor (escolher lib: jsPDF/PDFKit/Puppeteer)
+  - Template laudo (estrutura do briefing)
+  - Armazenar em service_documents
+  - Notificações (laudo solicitado/disponibilizado)
+  - API download (signed URL)
+  - "Baixar Informações do Serviço" (documento completo)
+
+  Estrutura esperada:
+  - Identificação: número, data, trabalhador, contato
+  - Cliente: nome, endereço
+  - Problema informado vs identificado
+  - Avaliação técnica, possível causa
+  - Serviço realizado, procedimentos, materiais, peças
+  - Intervenções, autorizações
+  - O que não foi realizado
+  - Resultado
+  - Fotos (antes/durante/depois)
+  - Observações
+
+  Tempo estimado: 20-30h
+
+✗ Etapa 10: Retenção/exclusão automática (0% - nada iniciado)
+  Falta tudo:
+  - Rotina agendada (escolher: Vercel Cron, Supabase Edge Function, pg_cron)
+  - Buscar serviços com expires_at <= now()
+  - Excluir:
+    * service_records
+    * service_files (Storage + tabela)
+    * service_documents (Storage + tabela)
+    * service_address
+    * Dados detalhados
+  - Criar service_history_summary (data, local, tipo apenas)
+  - Idempotência (não re-executar mesma exclusão)
+  - Logs de falha
+  - Notificar antes da exclusão (7 dias, 3 dias, 1 dia)
+
+  Regra confirmada: expires_at NUNCA reinicia (fixo em created_at + 7 dias)
+
+  Tempo estimado: 12-16h
+
+✗ Admin (10% - só placeholder)
+  Existe: /admin (página vazia)
+  Falta:
+  - Listar usuários
+  - Alterar papéis (com auditoria)
+  - Visualizar audit_logs
+  - Métricas (serviços criados/concluídos/cancelados)
+  - Serviços próximos da expiração
+  - Erros da rotina de exclusão
+
+  Tempo estimado: 6-10h
+
+✗ Testes E2E (0%)
+  Existem: Testes SQL manuais (6 arquivos em supabase/tests/)
+  Falta:
+  - Setup Playwright ou Cypress
+  - Fluxo completo cliente (cadastro → aceitar pedido → registrar → ver serviço)
+  - Fluxo completo trabalhador (criar pedido → registrar → concluir)
+  - Teste retenção/exclusão
+  - CI/CD
+
+  Tempo estimado: 8-12h
+
+✗ Deploy produção (0%)
+  Falta:
+  - Staging deploy
+  - Configurar env vars (NEXT_PUBLIC_SITE_URL, DATABASE_URL, etc)
+  - Configurar domínio
+  - Configurar backups Supabase
+  - Configurar monitoramento (Sentry, Vercel Analytics)
+  - Política de privacidade (LGPD)
+  - Termos de uso
+  - Deploy produção
+
+  Tempo estimado: 8-12h
+
+
+ARQUIVOS IMPORTANTES
+================================================================================
+
+Documentação projeto:
+  CLAUDE.md                      - Guia completo do projeto (leia primeiro)
+  ANALISE-PROJETO-COMPLETA.md   - Esta análise detalhada
+  RELATORIO-AUTONOMO.md          - Correções anteriores (14 fixes)
+  RELATORIO-TESTES-SEGURANCA.md  - Validação segurança Storage/RLS
+
+Banco de dados:
+  supabase/migrations/*.sql      - 13 migrations (ordem cronológica)
+  supabase/tests/*.sql           - Testes SQL manuais
+
+Frontend principal:
+  app/servicos/[id]/page.tsx     - Página do serviço (core)
+  app/servicos/[id]/record-form.tsx - Formulário registros
+  app/servicos/[id]/actions.ts   - Server actions (upload, criar registro)
+  app/painel/page.tsx            - Dashboard principal
+  app/pedidos/novo/page.tsx      - Criar pedido de serviço
+  app/convite/[token]/page.tsx   - Aceitar convite por link
+
+Backend/lógica:
+  lib/services/detail.ts         - Buscar serviço, registros, arquivos
+  lib/services/list.ts           - Listar serviços
+  lib/auth/get-user.ts           - Pegar usuário atual
+  lib/auth/require-role.ts       - Proteção por papel
+  lib/supabase/server.ts         - Cliente Supabase servidor
+
+APIs:
+  app/api/storage/service-files/[id]/route.ts - Download arquivo (signed URL)
+
+
+PRÓXIMOS PASSOS (ORDEM DE PRIORIDADE)
+================================================================================
+
+URGENTE (fazer agora, 5 minutos):
+  1. Renomear migration duplicada:
+     mv supabase/migrations/20261009000012_test_set_role.sql \
+        supabase/migrations/20261009000013_test_set_role.sql
+
+  2. Adicionar header em test_set_role.sql:
+     -- ATENÇÃO: FUNÇÃO DE TESTE - REMOVER ANTES DE PRODUÇÃO
+     -- Permite alterar papéis para testes. NUNCA usar em produção.
+
+  3. Commitar arquivos não rastreados:
+     git add RELATORIO-*.md supabase/tests/*.sql CONTEXTO-SESSAO.txt
+     git commit -m "docs: adiciona relatórios e contexto de sessão"
+
+CRÍTICO (terminar V1, 2-3 semanas):
+  4. Notificações UI (8-12h)
+  5. Laudo PDF (20-30h)
+  6. Exclusão automática (12-16h)
+  7. Admin funcional (6-10h)
+  8. Testes E2E (8-12h)
+  9. Deploy staging + produção (8-12h)
+
+Total restante: 62-92 horas
+
+
+DECISÃO NECESSÁRIA
+================================================================================
+
+Opção A - V1 Completa (recomendado):
+  - Implementar: notificações UI, laudo, exclusão automática, admin, testes
+  - Tempo: 2-3 semanas (1 dev)
+  - Risco: baixo (base sólida)
+  - Resultado: V1 conforme briefing
+
+Opção B - MVP Reduzido:
+  - Lançar sem: notificações UI, laudo, exclusão automática
+  - Gestão manual: admin apaga dados manualmente
+  - Tempo: 1 semana (testes + deploy apenas)
+  - Risco: médio (dívida técnica, não atende briefing completo)
+
+
+INFORMAÇÕES TÉCNICAS
+================================================================================
+
+Stack:
+  - Next.js 16.3.7 (App Router)
+  - React 19.2.8
+  - TypeScript 5
+  - Tailwind CSS 4
+  - Supabase (Auth + PostgreSQL + Storage + RLS)
+  - Vercel (hosting previsto)
+
+Estrutura banco:
+  - 12 tabelas principais
+  - 7 tipos ENUM
+  - RLS ativo em todas
+  - 6 funções de negócio (security definer)
+  - Constraints: length, format, foreign keys
+
+Segurança validada:
+  ✓ Storage RLS bloqueia não-participantes
+  ✓ Tabelas RLS isolam por serviço
+  ✓ API verifica participação antes signed URL
+  ✓ Todas actions validam input
+  ✓ Sem any types, sem @ts-ignore
+  ✓ .env* no gitignore
+
+Ambiente:
+  - Desenvolvimento: npm run dev
+  - Build: npm run build
+  - Lint: npm run lint (eslint)
+  - TypeCheck: npx tsc --noEmit
+
+
+PROBLEMAS CONHECIDOS
+================================================================================
+
+1. Migration duplicada (crítico, ver URGENTE acima)
+2. set_test_role em produção (crítico, ver URGENTE acima)
+3. Rotas inconsistentes: service_requests aparece em /convites (deveria ser /pedidos)
+4. Agenda fora do escopo original (quote_visits não estava no briefing)
+5. worker_profiles subutilizado (só em preview_invite)
+6. Arquivos não commitados (RELATORIO-*.md, tests/*.sql)
+
+
+COMANDOS ÚTEIS
+================================================================================
+
+Desenvolvimento:
+  npm run dev           # Inicia servidor dev (localhost:3000)
+  npm run build         # Build produção
+  npm run lint          # ESLint
+  npx tsc --noEmit      # Verifica tipos
+
+Git:
+  git status            # Ver arquivos não commitados
+  git add .             # Adicionar tudo
+  git commit -m "msg"   # Commitar
+  git log --oneline -10 # Últimos 10 commits
+
+Supabase (se configurado localmente):
+  supabase start        # Inicia Supabase local
+  supabase db reset     # Reset database local
+  supabase migration new nome  # Cria migration
+
+Testes SQL:
+  # Rodar no SQL Editor do Supabase Dashboard
+  # Arquivos: supabase/tests/*.sql
+
+
+LEMBRETE IMPORTANTE
+================================================================================
+
+Antes de implementar QUALQUER funcionalidade, perguntar:
+
+  "Isso é necessário para conectar, organizar, registrar ou documentar o serviço?"
+
+Se NÃO: está fora da V1.
+
+O objetivo é fazer o básico muito bem feito, não criar sistema grande.
+
+
+CONTATO COM O DONO
+================================================================================
+
+Sempre:
+  1. Explicar antes de codar (plano em português simples)
+  2. Uma etapa por vez (não adiantar futuro)
+  3. Explicar código novo em linguagem simples
+  4. Segurança: nunca mexer sem avisar (auth, RLS, policies, Storage)
+  5. Terminar com checklist de teste manual
+  6. Sugerir commit com mensagem clara
+  7. Apontar problemas mesmo fora da tarefa
+
+Dono conhece estrutura de código, mas NÃO conhece React nem segurança.
+
+================================================================================
+FIM DO CONTEXTO
+================================================================================
+
+Para nova sessão:
+1. Ler este arquivo primeiro
+2. Ler CLAUDE.md se precisar detalhes do produto
+3. Ler ANALISE-PROJETO-COMPLETA.md se precisar análise detalhada
+4. Verificar git status (arquivos não commitados)
+5. Corrigir erros URGENTES antes de qualquer feature nova

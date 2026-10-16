@@ -1,0 +1,977 @@
+================================================================================
+SOUZA.L - TAREFAS ORGANIZADAS PARA EXECUÇÃO PARALELA
+Data: 2026-10-09
+================================================================================
+
+LEGENDA:
+  [URGENTE]  - Bloqueia tudo, fazer primeiro
+  [CRÍTICO]  - Necessário para V1 funcionar
+  [BASE]     - Fundação para outras tarefas
+  [ISOLADO]  - Pode fazer sozinho, não depende de nada
+  ⏱️ Tempo estimado
+
+DEPENDÊNCIAS:
+  → Task A depende de Task B estar completa
+  ↔ Tasks podem ser feitas em paralelo (independentes)
+
+
+================================================================================
+FASE 0: URGENTE (FAZER ANTES DE TUDO)
+================================================================================
+
+[URGENTE-1] Corrigir migration duplicada ⏱️ 5min
+└─ Descrição:
+   Renomear 20261009000012_test_set_role.sql para 20261009000013_test_set_role.sql
+
+└─ Comandos:
+   cd C:\Users\User\souza.l\supabase\migrations
+   mv 20261009000012_test_set_role.sql 20261009000013_test_set_role.sql
+
+└─ Bloqueio: Migrations futuras vão falhar sem isso
+
+└─ Dependências: Nenhuma
+
+
+[URGENTE-2] Documentar set_test_role como teste ⏱️ 5min
+└─ Descrição:
+   Adicionar header no arquivo 20261009000013_test_set_role.sql
+
+└─ Conteúdo adicionar no topo:
+   -- ============================================================
+   -- ATENÇÃO: FUNÇÃO DE TESTE - REMOVER ANTES DE PRODUÇÃO
+   -- ============================================================
+   -- Esta função permite alterar papéis de usuários para facilitar
+   -- testes manuais. Em produção, isso seria uma vulnerabilidade
+   -- de segurança crítica (escalação de privilégios).
+   --
+   -- AÇÕES ANTES DE DEPLOY PRODUÇÃO:
+   -- 1. Deletar este arquivo de migrations/
+   -- 2. OU alterar para: grant execute ... to authenticated → apenas admins
+   -- ============================================================
+
+└─ Dependências: [URGENTE-1]
+
+
+[URGENTE-3] Commitar arquivos não rastreados ⏱️ 5min
+└─ Descrição:
+   Commitar relatórios e testes para não perder trabalho
+
+└─ Comandos:
+   git add RELATORIO-AUTONOMO.md RELATORIO-TESTES-SEGURANCA.md
+   git add ANALISE-PROJETO-COMPLETA.md CONTEXTO-SESSAO.txt TAREFAS-PARALELAS.txt
+   git add supabase/tests/*.sql
+   git add verificar-projeto.sh
+   git commit -m "docs: adiciona relatórios de análise e testes de segurança"
+
+└─ Dependências: Nenhuma (pode fazer em paralelo com URGENTE-1,2)
+
+
+================================================================================
+FASE 1: DECISÃO ESTRATÉGICA (ESCOLHER CAMINHO)
+================================================================================
+
+[DECISÃO] Escopo da V1 ⏱️ 30min (reunião com dono)
+└─ Opção A: V1 Completa (conforme briefing)
+   - Implementar: Notificações UI, Laudo PDF, Exclusão automática
+   - Tempo total: 2-3 semanas
+   - Risco: Baixo
+   - Resultado: Produto conforme prometido
+
+└─ Opção B: MVP Reduzido (lançar rápido)
+   - Lançar sem: Laudo, Exclusão automática
+   - Notificações: backend ok, UI depois
+   - Gestão manual: Admin apaga dados na mão
+   - Tempo: 1 semana (testes + deploy)
+   - Risco: Médio (dívida técnica)
+   - Resultado: Produto funcional mas incompleto
+
+└─ Opção C: Híbrido (priorizar laudo)
+   - Implementar: Laudo PDF (feature mais pedida)
+   - Adiar: Exclusão automática (gestão manual temporária)
+   - Notificações: UI básica (só listar)
+   - Tempo: 1.5-2 semanas
+   - Risco: Baixo-Médio
+
+└─ Impacto: Define quais tarefas da Fase 2 executar
+
+└─ Recomendação: Opção A (base 60% pronta, falta só crítico)
+
+
+[DECISÃO-EXTRA] Agenda de orçamentos ⏱️ 10min (reunião com dono)
+└─ Questão:
+   A funcionalidade "Agenda" (quote_visits) não estava no briefing original.
+   Está implementada e funcionando. Manter ou remover?
+
+└─ Opção A: Manter
+   - Pros: Já funciona, útil para o trabalhador
+   - Contras: Aumenta superfície de testes, mais complexo
+
+└─ Opção B: Remover/Desabilitar
+   - Pros: Simplifica V1, foco no core
+   - Contras: Perde funcionalidade já pronta
+
+└─ Opção C: Manter mas não testar a fundo na V1
+   - Pros: Disponível se precisar, não atrasa V1
+   - Contras: Feature não testada em produção
+
+└─ Recomendação: Opção A (já está pronta e integrada)
+
+
+================================================================================
+FASE 2: CRÍTICO (V1 NÃO FUNCIONA SEM ISSO)
+================================================================================
+
+Estas tarefas podem ser feitas em PARALELO por pessoas/sessões diferentes:
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ TRILHA A: NOTIFICAÇÕES UI                                   │
+└─────────────────────────────────────────────────────────────┘
+
+[A1] Criar página /notificacoes ⏱️ 3h [ISOLADO]
+└─ Descrição:
+   Criar app/notificacoes/page.tsx
+   Listar notificações do usuário (mais recentes primeiro)
+
+└─ Backend já existe:
+   - Tabela notifications
+   - RLS: user_id = auth.uid()
+   - Campos: type, title, message, resource_type, resource_id, read_at
+
+└─ UI mostrar:
+   - Ícone por tipo (pedido/serviço/convite)
+   - Título + mensagem
+   - Data/hora (formatDateTime)
+   - Badge se não lida (read_at IS NULL)
+   - Link para recurso (se resource_type + resource_id existem)
+
+└─ Query Supabase:
+   .from('notifications')
+   .select('*')
+   .eq('user_id', user.id)
+   .order('created_at', { ascending: false })
+   .limit(50)
+
+└─ Dependências: Nenhuma (backend pronto)
+
+
+[A2] Marcar notificação como lida ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Server action: markAsRead(notificationId)
+   Atualizar read_at = now()
+
+└─ Arquivo: app/notificacoes/actions.ts
+
+└─ Validação:
+   - Verificar notification.user_id = auth.uid()
+   - RLS já garante, mas validar no servidor também
+
+└─ UI:
+   - Clicar em notificação → marcar lida automaticamente
+   - Botão "Marcar todas como lidas"
+
+└─ Dependências: Nenhuma (pode fazer antes de A1)
+
+
+[A3] Badge de não-lidas no menu ⏱️ 2h
+└─ Descrição:
+   Mostrar contador de notificações não lidas no painel
+
+└─ Query:
+   .from('notifications')
+   .select('id', { count: 'exact', head: true })
+   .eq('user_id', user.id)
+   .is('read_at', null)
+
+└─ Localização:
+   - app/painel/page.tsx (adicionar link)
+   - Componente: components/notifications-badge.tsx
+
+└─ UI:
+   Badge vermelho com número (se > 0)
+
+└─ Dependências: A1 (precisa da rota /notificacoes para linkar)
+
+
+[A4] Testes notificações ⏱️ 1h
+└─ Descrição:
+   - Criar pedido → verificar notificação criada
+   - Aceitar pedido → verificar notificação
+   - Mudar status → verificar notificação
+   - Marcar como lida → verificar read_at atualizado
+
+└─ Tipo: Manual ou E2E (Playwright)
+
+└─ Dependências: A1, A2, A3
+
+
+TEMPO TOTAL TRILHA A: 8h
+PARALELIZÁVEL: A1 ↔ A2 (podem fazer ao mesmo tempo)
+                A3 depende de A1
+                A4 depende de tudo
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ TRILHA B: LAUDO PDF                                         │
+└─────────────────────────────────────────────────────────────┘
+
+[B1] Escolher biblioteca PDF ⏱️ 2h [ISOLADO] [BASE]
+└─ Descrição:
+   Pesquisar e decidir biblioteca para gerar PDF no servidor
+
+└─ Opções:
+   1. jsPDF (client + server, simples, 15kb)
+   2. PDFKit (server-only, robusto, streams)
+   3. Puppeteer (HTML → PDF, pesado, requer Chrome)
+   4. @react-pdf/renderer (React components → PDF)
+
+└─ Critérios:
+   - Funciona em Vercel Edge/Serverless
+   - Suporta imagens (fotos do serviço)
+   - Suporta português (UTF-8)
+   - Tamanho bundle razoável
+
+└─ Recomendação inicial: PDFKit ou @react-pdf/renderer
+
+└─ Output: Documento decisão + POC simples (Hello World PDF)
+
+└─ Dependências: Nenhuma
+
+
+[B2] Criar função RPC "solicitar_laudo" ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Migration: criar função request_service_report(p_service_id uuid)
+
+└─ Lógica:
+   - Verificar: service existe e user participa (client_id ou worker_id)
+   - Verificar: status = completed (só serviço concluído gera laudo)
+   - Inserir em service_documents:
+     * service_id
+     * document_type = 'report'
+     * status = 'pending'
+     * requested_by = auth.uid()
+     * requested_at = now()
+   - Criar notificação para worker: "Cliente solicitou laudo"
+
+└─ Arquivo: supabase/migrations/20261010000014_report_request.sql
+
+└─ Dependências: Nenhuma (backend puro)
+
+
+[B3] UI "Solicitar Laudo" ⏱️ 2h
+└─ Descrição:
+   Botão na página /servicos/[id] (só cliente, só se completed)
+
+└─ Lógica:
+   - Verificar se já existe laudo pending/generated
+   - Se não: mostrar botão "Solicitar Laudo"
+   - Se pending: mostrar "Laudo solicitado, aguardando..."
+   - Se generated: mostrar botão "Baixar Laudo"
+
+└─ Server action: app/servicos/[id]/actions.ts
+   export async function requestReport(serviceId: string)
+
+└─ Dependências: B2
+
+
+[B4] Template do laudo (estrutura) ⏱️ 4h [ISOLADO]
+└─ Descrição:
+   Criar estrutura do PDF conforme briefing
+
+└─ Seções (ordem):
+   1. Cabeçalho: Logo/nome profissional, data, número serviço
+   2. Identificação: Cliente, endereço
+   3. Problema informado (pelo cliente)
+   4. Problema identificado (pelo trabalhador)
+   5. Avaliação técnica
+   6. Serviço realizado (procedimentos, materiais, peças)
+   7. Intervenções (quebra parede/piso, autorizações)
+   8. O que NÃO foi realizado
+   9. Resultado
+   10. Registro fotográfico (antes/durante/depois)
+   11. Observações
+   12. Rodapé: Data conclusão, assinatura trabalhador
+
+└─ Dados vêm de:
+   - services (endereço, tipo, datas)
+   - profiles (nomes)
+   - service_records (filtrar por author_role)
+   - service_files (fotos)
+
+└─ Arquivo: lib/documents/report-template.ts
+   export function generateReportData(serviceId: string): Promise<ReportData>
+
+└─ Dependências: B1 (precisa saber qual biblioteca)
+
+
+[B5] Gerar PDF no servidor ⏱️ 6h
+└─ Descrição:
+   API route: app/api/reports/generate/route.ts
+
+└─ Fluxo:
+   1. Receber serviceId + documentId
+   2. Verificar: service_documents existe e status = pending
+   3. Verificar: user é worker do serviço
+   4. Buscar dados: generateReportData(serviceId)
+   5. Baixar fotos do Storage (signed URLs)
+   6. Gerar PDF com template
+   7. Upload PDF para Storage: bucket reports/, path: {service_id}/{document_id}.pdf
+   8. Atualizar service_documents:
+      - status = 'generated'
+      - storage_path = path no Storage
+      - generated_at = now()
+   9. Criar notificação para cliente: "Laudo disponível"
+
+└─ Error handling:
+   - Foto não carrega: continuar sem ela
+   - PDF muito grande (>10MB): reduzir qualidade imagens
+   - Timeout: marcar como failed, permitir retry
+
+└─ Dependências: B1, B4
+
+
+[B6] Download do laudo ⏱️ 2h
+└─ Descrição:
+   API route: app/api/reports/[documentId]/route.ts
+
+└─ Lógica:
+   - Verificar: service_documents existe
+   - Verificar: user participa do serviço (client_id ou worker_id)
+   - Gerar signed URL (1h)
+   - Redirecionar para signed URL
+
+└─ Botão na página: /servicos/[id]
+   "Baixar Laudo" (se status = generated)
+
+└─ Dependências: B5
+
+
+[B7] "Baixar Informações do Serviço" ⏱️ 4h
+└─ Descrição:
+   Documento completo (não é laudo formal, é export de tudo)
+
+└─ Diferença do laudo:
+   - Laudo: formatado, profissional, só após concluído
+   - Informações: simples, qualquer momento, todos dados
+
+└─ Formato: PDF ou JSON?
+   Recomendação: PDF (mais fácil pro usuário)
+
+└─ Conteúdo:
+   - Tudo do laudo +
+   - Registros do cliente (não só trabalhador)
+   - Histórico completo (todas mudanças status)
+   - Metadados (created_at, expires_at, etc)
+
+└─ Botão: Sempre visível na página /servicos/[id]
+   "Baixar Informações Completas"
+
+└─ Não salva em service_documents (é export sob demanda)
+
+└─ Dependências: B1, B4 (reutiliza template)
+
+
+[B8] Testes laudo ⏱️ 2h
+└─ Descrição:
+   - Criar serviço → concluir → solicitar laudo
+   - Worker gerar laudo → verificar PDF criado
+   - Cliente baixar → verificar conteúdo
+   - Testar com/sem fotos
+   - Testar campos vazios
+   - Testar "Baixar Informações"
+
+└─ Dependências: B2, B3, B5, B6, B7
+
+
+TEMPO TOTAL TRILHA B: 24h
+PARALELIZÁVEL: B1 ↔ B2 ↔ B3 (totalmente independentes)
+                B4 depende de B1
+                B5 depende de B1, B4
+                B6 depende de B5
+                B7 depende de B1, B4 (paralelo com B5,B6)
+                B8 depende de tudo
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ TRILHA C: EXCLUSÃO AUTOMÁTICA                               │
+└─────────────────────────────────────────────────────────────┘
+
+[C1] Escolher sistema de cron ⏱️ 2h [ISOLADO] [BASE]
+└─ Descrição:
+   Decidir como executar rotina automática
+
+└─ Opções:
+   1. Vercel Cron Jobs (vercel.json)
+      - Pros: Integrado, fácil, gratuito até 1 job
+      - Contras: Mínimo 1x/dia em plano free
+
+   2. Supabase Edge Functions + pg_cron
+      - Pros: Roda no banco, preciso
+      - Contras: Mais setup, docs menos claras
+
+   3. GitHub Actions (schedule)
+      - Pros: Gratuito, flexível
+      - Contras: Precisa endpoint público
+
+   4. Função manual (admin trigger)
+      - Pros: Simples, controle total
+      - Contras: Não é automático (V1 pode ser assim)
+
+└─ Recomendação: Vercel Cron (1x/dia) ou manual admin (V1)
+
+└─ Output: Documento decisão
+
+└─ Dependências: Nenhuma
+
+
+[C2] Criar função "cleanup_expired_services" ⏱️ 4h [ISOLADO]
+└─ Descrição:
+   Migration: função PL/pgSQL que faz a limpeza
+
+└─ Lógica:
+   FOR cada service WHERE expires_at <= now() AND status IN ('completed', 'cancelled'):
+     1. Listar service_files.storage_path
+     2. Deletar de service_files (CASCADE ou manual?)
+     3. Deletar de service_records
+     4. Deletar de service_documents
+     5. Criar em service_history_summary:
+        - service_number
+        - service_date = created_at
+        - service_location = service_address
+        - service_type
+     6. UPDATE services SET service_address = NULL (ou DELETE row?)
+     7. Registrar em audit_logs
+     8. COMMIT
+
+└─ Idempotência:
+   - Verificar se service_history_summary já existe (service_number)
+   - Se sim: skip (já foi processado)
+
+└─ Error handling:
+   - Usar EXCEPTION block por serviço (um erro não para todos)
+   - Registrar erro em audit_logs
+   - ROLLBACK só daquele serviço
+
+└─ Arquivo: supabase/migrations/20261010000015_cleanup_function.sql
+
+└─ Dependências: Nenhuma
+
+
+[C3] Deletar arquivos do Storage ⏱️ 3h
+└─ Descrição:
+   Função Edge ou API route que deleta arquivos
+
+└─ Problema:
+   PL/pgSQL não acessa Storage diretamente
+   Precisa chamar API Supabase Storage
+
+└─ Soluções:
+   A) Edge Function (supabase/functions/cleanup-storage.ts)
+   B) API route Next.js (/api/admin/cleanup-storage)
+   C) Deletar via service_files CASCADE + Storage lifecycle policy
+
+└─ Recomendação: C (mais simples) ou B (mais controle)
+
+└─ Se usar B:
+   - Endpoint protegido (só admin ou CRON_SECRET)
+   - Recebe lista de storage_paths
+   - Chama supabase.storage.from('service-files').remove(paths)
+   - Retorna sucesso/falha
+
+└─ Dependências: C2 (precisa listar paths antes de deletar)
+
+
+[C4] Notificar antes da exclusão ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Avisar cliente/trabalhador antes de apagar
+
+└─ Quando:
+   - 3 dias antes: "Seu serviço será excluído em 3 dias. Baixe os dados."
+   - 1 dia antes: "Último dia! Serviço será excluído amanhã."
+
+└─ Como:
+   - Rotina separada (roda todo dia)
+   - Busca services WHERE expires_at BETWEEN now() AND now() + interval '3 days'
+   - Cria notificação (se não existir já)
+
+└─ Tabela auxiliar (opcional):
+   - deletion_warnings (service_id, warning_sent_at)
+   - Evita notificação duplicada
+
+└─ Dependências: Nenhuma (independente da exclusão)
+
+
+[C5] Botão manual admin "Executar limpeza" ⏱️ 2h
+└─ Descrição:
+   Botão em /admin para rodar limpeza manualmente
+
+└─ Útil para:
+   - Testar função antes de automatizar
+   - V1 sem cron (admin roda manual)
+   - Debug (ver quantos serviços seriam apagados)
+
+└─ UI:
+   - Mostrar: X serviços expirados
+   - Botão: "Executar limpeza agora"
+   - Confirmação: "Isso apagará X serviços. Confirmar?"
+   - Após executar: Mostrar log (quantos apagados, erros)
+
+└─ Server action: app/admin/actions.ts
+   export async function runCleanup()
+
+└─ Dependências: C2 (chama a função)
+
+
+[C6] Configurar cron (se automático) ⏱️ 1h
+└─ Descrição:
+   Configurar execução automática
+
+└─ Se Vercel Cron:
+   Criar vercel.json:
+   {
+     "crons": [{
+       "path": "/api/cron/cleanup",
+       "schedule": "0 3 * * *"  // 3h da manhã todo dia
+     }]
+   }
+
+   Criar app/api/cron/cleanup/route.ts:
+   - Verificar Authorization: Bearer CRON_SECRET
+   - Chamar cleanup_expired_services()
+   - Chamar cleanup Storage
+   - Retornar JSON com resultado
+
+└─ Se manual:
+   Pular esta task (C5 já resolve)
+
+└─ Dependências: C2, C3, C5
+
+
+[C7] Testes exclusão ⏱️ 3h
+└─ Descrição:
+   Testar cenários de limpeza
+
+└─ Casos:
+   1. Serviço expirado → verifica se foi apagado
+   2. Serviço NÃO expirado → verifica que permanece
+   3. Summary criado corretamente
+   4. Arquivos deletados do Storage
+   5. Notificações enviadas (3 dias, 1 dia)
+   6. Erro em 1 serviço não quebra outros
+   7. Idempotência (rodar 2x não duplica summary)
+
+└─ Como:
+   - Criar serviço de teste
+   - UPDATE services SET expires_at = now() - interval '1 day'
+   - Rodar cleanup
+   - Verificar resultados
+   - Limpar dados teste
+
+└─ Dependências: C2, C3, C4
+
+
+TEMPO TOTAL TRILHA C: 17h
+PARALELIZÁVEL: C1 ↔ C2 ↔ C4 (totalmente independentes)
+                C3 depende de C2
+                C5 depende de C2 (mas pode fazer em paralelo com C3,C4)
+                C6 depende de C2, C3
+                C7 depende de tudo
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ TRILHA D: ADMIN (mais baixa prioridade)                     │
+└─────────────────────────────────────────────────────────────┘
+
+[D1] Listar usuários ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Tabela em /admin com todos usuários
+
+└─ Query:
+   SELECT id, name, email, role, client_code, created_at
+   FROM profiles
+   ORDER BY created_at DESC
+
+└─ UI:
+   - Nome, email, papel, código (se cliente), data cadastro
+   - Link para "Alterar papel"
+   - Busca por nome/email
+   - Filtro por papel
+
+└─ Dependências: Nenhuma
+
+
+[D2] Alterar papel de usuário ⏱️ 2h
+└─ Descrição:
+   Admin pode mudar role de qualquer usuário
+
+└─ Função RPC:
+   admin_change_user_role(p_user_id uuid, p_new_role user_role)
+   - Verificar: caller é admin
+   - UPDATE profiles SET role = p_new_role WHERE id = p_user_id
+   - Registrar em audit_logs
+
+└─ UI:
+   Modal ou página /admin/usuarios/[id]/editar
+
+└─ Segurança:
+   - Admin não pode mudar próprio papel (evita lockout)
+   - Confirmação antes de mudar
+
+└─ Dependências: D1
+
+
+[D3] Métricas básicas ⏱️ 3h [ISOLADO]
+└─ Descrição:
+   Dashboard em /admin com números gerais
+
+└─ Métricas:
+   - Total usuários (por papel)
+   - Total serviços (por status)
+   - Serviços criados última semana
+   - Serviços próximos expiração (< 3 dias)
+   - Convites pendentes
+   - Visitas agendadas hoje
+
+└─ Queries:
+   SELECT role, count(*) FROM profiles GROUP BY role
+   SELECT status, count(*) FROM services GROUP BY status
+   SELECT count(*) FROM services WHERE expires_at < now() + interval '3 days'
+
+└─ UI: Cards com números grandes
+
+└─ Dependências: Nenhuma
+
+
+[D4] Visualizar audit_logs ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Página /admin/logs
+
+└─ Query:
+   SELECT al.*, p.name as actor_name
+   FROM audit_logs al
+   LEFT JOIN profiles p ON al.actor_id = p.id
+   ORDER BY created_at DESC
+   LIMIT 100
+
+└─ UI:
+   - Data, ator, ação, recurso, metadados (JSON)
+   - Filtro por ação, ator, data
+   - Paginação
+
+└─ Dependências: Nenhuma
+
+
+TEMPO TOTAL TRILHA D: 9h
+PARALELIZÁVEL: D1 ↔ D3 ↔ D4 (totalmente independentes)
+                D2 depende de D1
+
+
+================================================================================
+FASE 3: TESTES E2E
+================================================================================
+
+[E1] Setup Playwright ⏱️ 2h [BASE]
+└─ Descrição:
+   npm install -D @playwright/test
+   npx playwright install
+   Criar playwright.config.ts
+
+└─ Configuração:
+   - Base URL: http://localhost:3000
+   - Browsers: chromium, firefox
+   - Retry: 2x
+   - Screenshots on failure
+
+└─ Estrutura:
+   tests/
+     auth/
+       signup.spec.ts
+       login.spec.ts
+     services/
+       create-request.spec.ts
+       accept-request.spec.ts
+       add-record.spec.ts
+       upload-file.spec.ts
+     ...
+
+└─ Dependências: Nenhuma
+
+
+[E2] Testes fluxo cliente ⏱️ 4h
+└─ Descrição:
+   Simular usuário cliente completo
+
+└─ Cenários:
+   1. Cadastro → login → ver código
+   2. Receber pedido → aceitar → informar endereço
+   3. Ver serviço → adicionar registro → upload foto
+   4. Ver registros do trabalhador
+   5. Solicitar laudo (se implementado)
+   6. Baixar informações
+
+└─ Dependências: E1, Trilha A (se testar notificações), Trilha B (se testar laudo)
+
+
+[E3] Testes fluxo trabalhador ⏱️ 4h
+└─ Descrição:
+   Simular usuário trabalhador completo
+
+└─ Cenários:
+   1. Login → criar pedido → procurar cliente
+   2. Ver pedido aceito → abrir serviço
+   3. Adicionar registro técnico → upload foto
+   4. Mudar status → concluir
+   5. Gerar laudo (se implementado)
+   6. Agenda: criar visita → converter em convite
+
+└─ Dependências: E1, Trilha B (se testar laudo)
+
+
+[E4] Configurar CI/CD ⏱️ 2h
+└─ Descrição:
+   Rodar testes E2E em cada push
+
+└─ GitHub Actions:
+   .github/workflows/test.yml
+   - npm install
+   - npm run build
+   - npm run lint
+   - npx playwright test
+
+└─ Vercel:
+   - Preview deploys automáticos em PR
+   - Rodar testes contra preview URL
+
+└─ Dependências: E1, E2, E3
+
+
+TEMPO TOTAL FASE 3: 12h
+PARALELIZÁVEL: E2 ↔ E3 (podem escrever em paralelo, rodar sequencial)
+
+
+================================================================================
+FASE 4: DEPLOY
+================================================================================
+
+[F1] Configurar staging ⏱️ 2h [BASE]
+└─ Descrição:
+   Ambiente staging no Vercel
+
+└─ Setup:
+   - Criar projeto Vercel (se não existe)
+   - Branch staging → auto-deploy
+   - Supabase: projeto separado ou branch?
+
+└─ Env vars staging:
+   NEXT_PUBLIC_SITE_URL=https://staging.souza-l.vercel.app
+   NEXT_PUBLIC_SUPABASE_URL=...
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+   SUPABASE_SERVICE_ROLE_KEY=...
+
+└─ Dependências: Nenhuma
+
+
+[F2] Configurar domínio ⏱️ 1h
+└─ Descrição:
+   souza.l ou outro domínio
+
+└─ DNS:
+   - A record ou CNAME → Vercel
+   - SSL automático (Vercel cuida)
+
+└─ Vercel:
+   - Adicionar domínio custom
+   - Esperar propagação
+
+└─ Dependências: F1
+
+
+[F3] Configurar monitoramento ⏱️ 2h [ISOLADO]
+└─ Descrição:
+   Sentry para errors, Vercel Analytics para uso
+
+└─ Sentry:
+   - Criar projeto Sentry
+   - npm install @sentry/nextjs
+   - npx @sentry/wizard -i nextjs
+   - Configurar DSN em env vars
+
+└─ Vercel Analytics:
+   - Ativar no dashboard Vercel
+   - Adicionar <Analytics /> em layout.tsx
+
+└─ Dependências: Nenhuma
+
+
+[F4] Política privacidade + termos ⏱️ 3h [ISOLADO]
+└─ Descrição:
+   Documentos LGPD
+
+└─ Conteúdo mínimo:
+   - Quais dados coleta (nome, email, endereço)
+   - Finalidade (prestação serviço)
+   - Retenção (7 dias)
+   - Direitos (acesso, correção, exclusão)
+   - Contato (email responsável)
+
+└─ Páginas:
+   - /politica-privacidade
+   - /termos-uso
+
+└─ Links:
+   - Footer de todas páginas
+   - Checkbox em cadastro "Aceito os termos"
+
+└─ Dependências: Nenhuma
+
+
+[F5] Backup Supabase ⏱️ 1h [ISOLADO]
+└─ Descrição:
+   Configurar backups automáticos
+
+└─ Supabase Dashboard:
+   - Database backups: daily (mínimo)
+   - Retention: 7 days (plano free)
+   - Testar restore em projeto teste
+
+└─ Documentar:
+   - Como fazer restore manual
+   - Onde ficam os backups
+
+└─ Dependências: Nenhuma
+
+
+[F6] Deploy produção ⏱️ 2h
+└─ Descrição:
+   Lançar em produção
+
+└─ Checklist:
+   □ Testes E2E passando
+   □ Migrations aplicadas no Supabase prod
+   □ Env vars configuradas
+   □ Domínio apontando
+   □ Monitoramento ativo
+   □ Backups configurados
+   □ set_test_role REMOVIDO
+
+└─ Deploy:
+   - Merge main → auto-deploy Vercel
+   - Smoke test manual (cadastro, login, criar serviço)
+   - Monitorar errors primeira hora
+
+└─ Dependências: F1, F2, F3, F4, F5, E4
+
+
+TEMPO TOTAL FASE 4: 11h
+PARALELIZÁVEL: F1 ↔ F3 ↔ F4 ↔ F5 (totalmente independentes)
+                F2 depende de F1
+                F6 depende de tudo
+
+
+================================================================================
+RESUMO GERAL
+================================================================================
+
+FASE 0 - URGENTE:          15min  (bloqueia tudo)
+FASE 1 - DECISÃO:          40min  (define escopo)
+
+FASE 2 - CRÍTICO:          58h    (4 trilhas paralelas)
+  Trilha A (Notificações): 8h
+  Trilha B (Laudo):        24h
+  Trilha C (Exclusão):     17h
+  Trilha D (Admin):        9h
+
+FASE 3 - TESTES:           12h    (2 trilhas paralelas)
+FASE 4 - DEPLOY:           11h    (algumas paralelas)
+
+TOTAL (V1 completa):       81.5h  (~2 semanas com 1 dev)
+SEM Laudo (MVP):           57.5h  (~1.5 semanas)
+SEM Laudo + Exclusão:      40.5h  (~1 semana)
+
+
+ESTRATÉGIA DE PARALELIZAÇÃO
+================================================================================
+
+CENÁRIO 1: 1 desenvolvedor sozinho
+└─ Fazer em ordem: FASE 0 → FASE 1 → FASE 2 → FASE 3 → FASE 4
+└─ Dentro de cada Trilha: fazer tasks em ordem de dependência
+└─ Tempo: 2 semanas
+
+CENÁRIO 2: 2 desenvolvedores em paralelo
+└─ Dev 1: FASE 0 → Trilha A + Trilha C
+└─ Dev 2: Trilha B (laudo, mais longa)
+└─ Depois juntos: Trilha D, FASE 3, FASE 4
+└─ Tempo: 1.5 semanas
+
+CENÁRIO 3: 3+ desenvolvedores
+└─ Dev 1: Trilha A (notificações)
+└─ Dev 2: Trilha B (laudo)
+└─ Dev 3: Trilha C (exclusão) + Trilha D (admin)
+└─ Depois juntos: FASE 3, FASE 4
+└─ Tempo: 1 semana
+
+
+SESSÕES CLAUDE EM PARALELO
+================================================================================
+
+Possível rodar 2-3 sessões Claude simultaneamente:
+
+SESSÃO 1: Trilha A (Notificações)
+  - Tasks A1, A2, A3 independentes
+  - A4 no final
+
+SESSÃO 2: Trilha B (Laudo)
+  - B1, B2 paralelos
+  - Depois B4, B5, B6 sequencial
+  - B7 paralelo com B6
+
+SESSÃO 3: Trilha C (Exclusão)
+  - C1, C2, C4 paralelos
+  - Depois C3, C5, C6 sequencial
+
+Coordenação:
+  - Cada sessão comita em branch separada
+  - Merge diário para integrar
+  - Conflitos mínimos (arquivos diferentes)
+
+
+MONITORAMENTO DE PROGRESSO
+================================================================================
+
+Criar arquivo PROGRESSO.txt:
+
+FASE 0 - URGENTE
+  [✓] URGENTE-1: Migration duplicada
+  [✓] URGENTE-2: Documentar set_test_role
+  [✓] URGENTE-3: Commitar arquivos
+
+FASE 2 - CRÍTICO
+  Trilha A (8h)
+    [✓] A1: Página notificações (3h)
+    [ ] A2: Marcar como lida (2h)
+    [ ] A3: Badge menu (2h)
+    [ ] A4: Testes (1h)
+
+  Trilha B (24h)
+    [ ] B1: Escolher lib PDF (2h)
+    ...
+
+Atualizar a cada task completada.
+
+
+PRÓXIMA AÇÃO IMEDIATA
+================================================================================
+
+1. Executar FASE 0 (15 minutos)
+2. Reunir com dono: FASE 1 - Decisão (40 minutos)
+3. Escolher cenário paralelização (1, 2 ou 3 devs?)
+4. Criar branches:
+   - feature/notificacoes-ui
+   - feature/laudo-pdf
+   - feature/exclusao-automatica
+   - feature/admin
+5. Começar Trilha escolhida
+
+================================================================================
+FIM DO ARQUIVO
+================================================================================
